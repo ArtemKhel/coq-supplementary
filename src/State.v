@@ -47,11 +47,23 @@ Section S.
     (SN : st / x => n)
     (SM : st / x => m) :
     n = m. 
-  Proof. admit. Admitted.
+  Proof. 
+    induction SN.
+    - inversion SM; subst.
+      + reflexivity.
+      + contradiction.
+    - inversion SM; subst.
+      + contradiction.
+      + apply IHSN. 
+        assumption. 
+  Qed.
   
   Lemma update_eq (st : state) (x : id) (n : A) :
     st [x <- n] / x => n.
-  Proof. admit. Admitted.
+  Proof. 
+    unfold update.
+    apply st_binds_hd.
+  Qed.
 
   Lemma update_neq (st : state) (x2 x1 : id) (n m : A)
         (NEQ : x2 <> x1) : st / x1 => m <-> st [x2 <- n] / x1 => m.
