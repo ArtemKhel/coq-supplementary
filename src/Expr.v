@@ -3,6 +3,7 @@ Require Import BinInt ZArith_dec.
 Require Export Id.
 Require Export State.
 Require Export Lia.
+Require Import Stdlib.Program.Equality.
 
 Require Import List.
 Import ListNotations.
@@ -302,7 +303,18 @@ Lemma variable_relevance (e : expr) (s1 s2 : state Z) (z : Z)
           equivalent_states s1 s2 id)
       (EV : [| e |] s1 => z) :
   [| e |] s2 => z.
-Proof. admit. Admitted.
+Proof.
+  generalize dependent z.
+  induction e; intros.
+  - inversion EV; subst.
+    apply bs_Nat.
+  - inversion EV; subst.
+    apply bs_Var.
+    apply FV.
+    + apply v_Var.
+    + assumption.
+  - inversion EV; subst; econstructor; eauto.
+Qed.
 
 Definition equivalent (e1 e2 : expr) : Prop :=
   forall (n : Z) (s : state Z), 
@@ -310,14 +322,33 @@ Definition equivalent (e1 e2 : expr) : Prop :=
 Notation "e1 '~~' e2" := (equivalent e1 e2) (at level 42, no associativity).
 
 Lemma eq_refl (e : expr): e ~~ e.
-Proof. admit. Admitted.
+Proof. 
+    unfold equivalent.
+    intros.
+    split. 
+    all: intros H; assumption.
+Qed.
 
 Lemma eq_symm (e1 e2 : expr) (EQ : e1 ~~ e2): e2 ~~ e1.
-Proof. admit. Admitted.
+Proof. 
+  intros.
+  split.
+  all: apply EQ.
+Qed.
 
 Lemma eq_trans (e1 e2 e3 : expr) (EQ1 : e1 ~~ e2) (EQ2 : e2 ~~ e3):
   e1 ~~ e3.
-Proof. admit. Admitted.
+Proof. 
+  unfold equivalent.
+  intros.
+  split; intros.
+  - apply EQ2.
+    apply EQ1.
+    assumption.
+  - apply EQ1.
+    apply EQ2.
+    assumption.
+Qed.
 
 Inductive Context : Type :=
 | Hole : Context
@@ -341,7 +372,24 @@ Notation "e1 '~c~' e2" := (contextual_equivalent e1 e2)
 
 Lemma eq_eq_ceq (e1 e2 : expr) :
   e1 ~~ e2 <-> e1 ~c~ e2.
-Proof. admit. Admitted.
+Proof.
+  unfold contextual_equivalent, equivalent.
+  split; intros.
+  - generalize dependent n.
+    induction C; intros; simpl.
+    + split; apply H.
+    + split; intros.
+      all: inversion H0; subst.
+      all: try constructor.
+      all: try apply IHC in VALA; eauto.
+    + split; intros.
+      all: inversion H0; subst.
+      all: try constructor.
+      all: try apply IHC in VALB; eauto.
+  - split; intros.
+    + apply (H Hole). simpl. assumption.
+    + apply (H Hole). simpl. assumption.
+Qed.  
 
 Module SmallStep.
 
@@ -394,10 +442,22 @@ Module SmallStep.
   #[export] Hint Constructors ss_eval : core.
 
   Lemma ss_eval_reachable s e e' (HE: s |- e -->> e') : s |- e ~~> e'.
-  Proof. admit. Admitted.
+  Proof. 
+    induction HE.
+    - apply reach_base.
+    - apply reach_step with e'; assumption.
+  Qed.
 
   Lemma ss_reachable_eval s e z (HR: s |- e ~~> (Nat z)) : s |- e -->> (Nat z).
-  Proof.  admit. Admitted.
+  Proof. 
+    remember (Nat z).
+    induction HR; subst.
+    - apply se_Stop.
+    - apply se_Step with e'.
+      + assumption.
+      + apply IHHR.
+        reflexivity.   
+  Qed.
 
   #[export] Hint Resolve ss_eval_reachable : core.
   #[export] Hint Resolve ss_reachable_eval : core.
@@ -406,49 +466,165 @@ Module SmallStep.
                      (H1: s |- e  -->> e')
                      (H2: s |- e' -->  e'') :
     s |- e -->> e''.
-  Proof. admit. Admitted.
+  Proof.
+    induction H1; subst.
+    - inversion H2.
+    - apply se_Step with e'.
+      + assumption.
+      + apply IHss_eval.
+        assumption. 
+  Qed.
   
   Lemma ss_reachable_trans s e e' e''
                           (H1: s |- e  ~~> e')
                           (H2: s |- e' ~~> e'') :
     s |- e ~~> e''.
-  Proof. admit. Admitted.
+  Proof.
+    induction H1; subst.
+    - assumption.
+    - apply reach_step with e'. 
+      + assumption.
+      + apply IHss_reachable.
+        assumption. 
+  Qed.
           
   Definition normal_form (e : expr) : Prop :=
     forall s, ~ exists e', (s |- e --> e').   
 
   Lemma value_is_normal_form (e : expr) (HV: is_value e) : normal_form e.
-  Proof. admit. Admitted.
+  Proof.
+    unfold normal_form.
+    unfold not.
+    intros.
+    destruct H.
+    induction HV; subst.
+    inversion H.
+  Qed.
 
   Lemma normal_form_is_not_a_value : ~ forall (e : expr), normal_form e -> is_value e.
-  Proof. admit. Admitted.
+  Proof.
+    remember ((Nat 1) [/] (Nat 0)) as C.
+    assert (normal_form C).
+    - unfold normal_form. 
+      unfold not. 
+      intros. 
+      destruct H; subst. 
+      inversion H; subst.
+      + inversion LEFT.
+      + inversion RIGHT.
+      + inversion EVAL; subst. 
+        inversion VALB; subst.
+        contradiction.
+    - intro. 
+      specialize (H0 C). 
+      apply H0 in H.
+      rewrite HeqC in H.
+      inversion H.
+  Qed.
   
   Lemma ss_nondeterministic : ~ forall (e e' e'' : expr) (s : state Z), s |- e --> e' -> s |- e --> e'' -> e' = e''.
-  Proof. admit. Admitted.
+  Proof.
+    intro.
+    remember ((Var (Id 0))) as x.
+    remember ([(Id 0, Z.one)]: state Z) as state.
+
+    remember ((x [+] x)) as e0.
+    remember ((Nat 1 [+] x)) as e1.
+    remember ((x [+] Nat 1)) as e2.
+
+    remember (H e0 e1 e2 state).
+
+    assert (state |- e0 --> e1).
+    - rewrite Heqe0.
+      rewrite Heqe1.
+      rewrite Heqx.
+      apply ss_Left.
+      apply ss_Var.
+      rewrite Heqstate.
+      apply st_binds_hd.
+    - assert (state |- e0 --> e2).
+      + rewrite Heqe0.
+        rewrite Heqe2.
+        rewrite Heqx.
+        apply ss_Right.
+        apply ss_Var.
+        rewrite Heqstate.
+        apply st_binds_hd.
+      + assert (e1 = e2).
+        * apply (H e0 e1 e2 state H0 H1).
+        * rewrite Heqe1, Heqe2, Heqx in H2.
+          inversion H2.
+  Qed.
   
   Lemma ss_deterministic_step (e e' : expr)
                          (s    : state Z)
                          (z z' : Z)
                          (H1   : s |- e --> (Nat z))
                          (H2   : s |- e --> e') : e' = Nat z.
-  Proof. admit. Admitted.
+  Proof.
+    inversion H1; subst.
+    - inversion H2; subst.
+      specialize (state_deterministic Z s i z z0 VAL VAL0). 
+      intros.
+      rewrite H.
+      reflexivity.
+    - inversion H2; subst.
+      + inversion LEFT; subst.
+      + inversion RIGHT; subst.
+      + assert (z = z0).
+        * apply (eval_deterministic (Bop op (Nat zl) (Nat zr)) s); assumption.
+        * subst. 
+          reflexivity. 
+  Qed.
   
   Lemma ss_eval_stops_at_value (st : state Z) (e e': expr) (Heval: st |- e -->> e') : is_value e'.
-  Proof. admit. Admitted.
+  Proof.
+    induction Heval; subst.
+    - apply isv_Intro.  
+    - assumption.
+  Qed.
 
   Lemma ss_subst s C e e' (HR: s |- e ~~> e') : s |- (C <~ e) ~~> (C <~ e').
-  Proof. admit. Admitted.
+  Proof. 
+    induction HR.
+    - apply reach_base.
+    - apply reach_step with (C <~ e').
+      + clear IHHR.
+        generalize dependent e'.
+        induction C; intros; simpl.
+        * assumption.
+        * apply ss_Left.
+          apply IHC;
+          assumption.
+        * apply ss_Right.
+          apply IHC;
+          assumption.
+      + assumption.
+  Qed.
    
   Lemma ss_subst_binop s e1 e2 e1' e2' op (HR1: s |- e1 ~~> e1') (HR2: s |- e2 ~~> e2') :
     s |- (Bop op e1 e2) ~~> (Bop op e1' e2').
-  Proof. admit. Admitted.
+  Proof. 
+    apply (ss_subst s (BopL op Hole e2) e1 e1') in HR1. 
+    apply (ss_subst s (BopR op e1' Hole) e2 e2') in HR2.
+    apply (ss_reachable_trans s (Bop op e1 e2) (Bop op e1' e2) (Bop op e1' e2')). 
+    all: assumption.
+  Qed.
 
   Lemma ss_bop_reachable s e1 e2 op za zb z
     (H : [|Bop op e1 e2|] s => (z))
     (VALA : [|e1|] s => (za))
     (VALB : [|e2|] s => (zb)) :
     s |- (Bop op (Nat za) (Nat zb)) ~~> (Nat z).
-  Proof. admit. Admitted.
+  Proof. 
+    inversion H; subst; simpl.
+    all: 
+      specialize (eval_deterministic _ _ _ _ VALA VALA0);
+      specialize (eval_deterministic _ _ _ _ VALB VALB0).
+    all: intros.
+    all: subst.
+    all: eauto.
+  Qed.
 
   #[export] Hint Resolve ss_bop_reachable : core.
    
@@ -459,14 +635,46 @@ Module SmallStep.
         (VALA : [|e1|] s => (za))
         (VALB : [|e2|] s => (zb)) :
         s |- Bop op e1 e2 -->> (Nat z).
-  Proof. admit. Admitted.
+  Proof.
+    apply ss_reachable_eval.
+    apply ss_reachable_trans with (Bop op (Nat za) (Nat zb)).
+    - apply ss_subst_binop; apply ss_eval_reachable; assumption.
+    - apply ss_bop_reachable with e1 e2; assumption.
+  Qed.
+
 
   #[export] Hint Resolve ss_eval_binop : core.
   
   Lemma ss_eval_equiv (e : expr)
                       (s : state Z)
                       (z : Z) : [| e |] s => z <-> (s |- e -->> (Nat z)).
-  Proof. admit. Admitted.
+  Proof. 
+  split; intros; generalize dependent z.
+  - induction e; intros.
+    + inversion H; subst.
+      constructor.
+    + inversion H; subst.
+      apply (se_Step s (Var i) (Nat z)).
+      * apply ss_Var.
+        assumption.
+      * apply se_Stop.  
+    + inversion H; subst.
+      all: specialize (IHe1 za VALA).
+      all: specialize (IHe2 zb VALB).
+      all: eauto.
+      
+  - induction e; intros.
+    + inversion H; subst.
+      * apply bs_Nat.
+      * inversion HStep.
+    + inversion H; subst.
+      inversion HStep; subst.
+      constructor.
+      inversion Heval; subst.
+      * assumption.
+      * inversion HStep0. 
+    + admit. 
+  Admitted.
   
 End SmallStep.
 
@@ -484,10 +692,16 @@ Module StaticSemantics.
   where "t1 << t2" := (subtype t1 t2).
 
   Lemma subtype_trans t1 t2 t3 (H1: t1 << t2) (H2: t2 << t3) : t1 << t3.
-  Proof. admit. Admitted.
+  Proof. 
+    inversion H1; inversion H2; subst.
+    all: auto.
+  Qed.
 
   Lemma subtype_antisymm t1 t2 (H1: t1 << t2) (H2: t2 << t1) : t1 = t2.
-  Proof. admit. Admitted.
+  Proof. 
+    inversion H1; inversion H2; subst.
+    all: auto.
+  Qed.
   
   Reserved Notation "e :-: t" (at level 0).
   
@@ -516,7 +730,14 @@ Module StaticSemantics.
 
   Lemma type_bool e (HT : e :-: Bool) :
     forall st z (HVal: [| e |] st => z), zbool z.
-  Proof. admit. Admitted.
+  Proof. 
+    intros.
+    inversion HT; subst; inversion HVal; subst.
+    all: try solve [ left ; trivial].
+    all: try solve [ right ; trivial].
+    * inversion BOOLA; subst; inversion BOOLB; subst; auto.
+    * inversion BOOLA; subst; inversion BOOLB; subst; auto.
+  Qed.
 
 End StaticSemantics.
 
@@ -532,10 +753,31 @@ Module Renaming.
   Definition renamings_inv (r r' : renaming) := forall (x : id), rename_id r (rename_id r' x) = x.
   
   Lemma renaming_inv (r : renaming) : exists (r' : renaming), renamings_inv r' r.
-  Proof. admit. Admitted.
+  Proof.
+    destruct r.
+    destruct b.
+    destruct a.
+    assert (B: Bijective x0).
+    - unfold Bijective. exists x. split; auto.
+    - exists (exist _ x0 B).
+      unfold renamings_inv.
+      intros. auto.
+  Qed.
 
   Lemma renaming_inv2 (r : renaming) : exists (r' : renaming), renamings_inv r r'.
-  Proof. admit. Admitted.
+  Proof. 
+  destruct r as [f Hf].
+  destruct Hf as [g [Hfg Hgf]].
+  assert (B: Bijective g).
+  - unfold Bijective. 
+    exists f. 
+    split; assumption.
+  - exists (exist _ g B).
+    unfold renamings_inv.
+    intros. 
+    simpl.
+    apply Hgf.
+  Qed.
 
   Fixpoint rename_expr (r : renaming) (e : expr) : expr :=
     match e with
@@ -548,7 +790,19 @@ Module Renaming.
     (r r' : renaming)
     (Hinv : renamings_inv r r')
     (e    : expr) : rename_expr r (rename_expr r' e) = e.
-  Proof. admit. Admitted.
+  Proof. 
+    induction e.
+    - simpl.
+      reflexivity.
+    - simpl. 
+      unfold renamings_inv.
+      rewrite Hinv.
+      reflexivity.
+    - simpl.
+      rewrite IHe1.
+      rewrite IHe2.
+      reflexivity.
+  Qed.
   
   Fixpoint rename_state (r : renaming) (st : state Z) : state Z :=
     match st with
@@ -561,10 +815,33 @@ Module Renaming.
     (r r' : renaming)
     (Hinv : renamings_inv r r')
     (st   : state Z) : rename_state r (rename_state r' st) = st.
-  Proof. admit. Admitted.
+  Proof.
+    induction st.
+    - simpl. 
+      reflexivity.
+    - destruct a as [id val].
+      simpl.
+      destruct r as [f Hf].
+      destruct r' as [g Hg].
+      simpl.
+      unfold renamings_inv.
+      simpl.
+      rewrite Hinv.
+      rewrite IHst.
+      reflexivity.
+  Qed.
       
   Lemma bijective_injective (f : id -> id) (BH : Bijective f) : Injective f.
-  Proof. admit. Admitted.
+  Proof.
+    unfold Bijective.
+    destruct BH as [g [Hfg Hgf]].
+    unfold Injective.
+    intros x y Heq.
+    rewrite <- (Hfg x).
+    rewrite <- (Hfg y).
+    rewrite Heq.
+    reflexivity.
+  Qed.
   
   Lemma eval_renaming_invariance (e : expr) (st : state Z) (z : Z) (r: renaming) :
     [| e |] st => z <-> [| rename_expr r e |] (rename_state r st) => z.
