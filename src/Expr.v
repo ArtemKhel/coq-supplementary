@@ -182,7 +182,22 @@ Module SmokeTest.
 
   Lemma zero_always x (s : state Z) : [| Var x [*] Nat 0 |] s => Z.zero.
   Proof. admit. Admitted.
-  
+
+  Lemma zero_always_fixed x (s : state Z) (n : Z) (H: s / x => n) : 
+    [| Var x [*] Nat 0 |] s => Z.zero.
+  Proof. 
+    assert ([|Nat 0|] s => 0).
+    - constructor.
+    - assert ([|Var x|] s => n).
+      + auto.
+      + specialize (bs_Mul s (Var x) (Nat 0) n 0 H1 H0). 
+        intros.
+        specialize (Z.mul_0_r n). 
+        intros. 
+        rewrite H3 in H2.
+        assumption.
+  Qed.
+
   Lemma nat_always n (s : state Z) : [| Nat n |] s => n.
   Proof.
     apply bs_Nat. 
@@ -727,6 +742,29 @@ Module StaticSemantics.
 
   Lemma type_preservation e t t' (HS: t' << t) (HT: e :-: t) : forall st e' (HR: st |- e ~~> e'), e' :-: t'.
   Proof. admit. Admitted.
+
+  Lemma type_preservation_counterexample : 
+    ~ (forall e t t' (HS: t' << t) (HT: e :-: t), 
+        forall st e' (HR: st |- e ~~> e'), e' :-: t').
+  Proof.
+    intro.
+    remember (Nat 2) as e.
+    assert (HT_Int: e :-: Int).
+    - subst e.
+      apply type_N.
+      unfold zbool.
+      intro.
+      destruct H0; discriminate.
+    - assert (HS: Bool << Int).
+      + apply subt_base.
+      + assert (HR: forall st, st |- e ~~> e).
+        * intro. 
+          apply reach_base.
+        * specialize (H e Int Bool HS HT_Int).
+          specialize (H [] e (HR [])).
+          subst e.
+          inversion H.
+  Qed.
 
   Lemma type_bool e (HT : e :-: Bool) :
     forall st z (HVal: [| e |] st => z), zbool z.

@@ -185,6 +185,7 @@ Section S.
     - apply H1.
       apply H2.
       assumption. 
+  Qed.
 
   Lemma equal_states_equive (st st' : state) (HE: st = st') : st ~~ st'.
   Proof. 
